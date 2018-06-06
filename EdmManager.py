@@ -27,27 +27,27 @@ x_nn, y_nn = tpc.get_nn_distribution()
 time = strftime("%m_%d_%H:%M", gmtime())
 # Plotting Unscaled Distribution #########
 plt.figure(1)
-plt.subplot(211)
+plt.subplot(121)
 plt.plot(distribution[:, 0], distribution[:, 1], '*')
 plt.xlabel(' X-ish ')
 plt.ylabel(' Y-ish ')
 plt.title('Unscaled Distribution after Classical MDS')
 
-plt.subplot(212)
+plt.subplot(122)
 plt.plot(distribution[:, 0], distribution[:, 1], '*')
 plt.xlabel(' X-ish ')
 plt.ylabel(' Y-ish ')
 plt.title('Unscaled Distribution after Classical MDS')
 plt.xlim([-2,2])
 plt.ylim([-2,2])
-plt.savefig('FuckItLetsGo'+time+'.png')
+plt.savefig('../EDM_Support/FuckItLetsGo'+time+'.png')
 
 plt.figure(2)
 plt.plot(x_nn, y_nn,'*')
 plt.xlabel(' X-ish ')
 plt.ylabel(' Y-ish ')
 plt.title('Neural Net Position from Pax')
-plt.savefig('NN-Position'+time+'.png')
+plt.savefig('../EDM_Support/NN-Position'+time+'.png')
 
 
 
