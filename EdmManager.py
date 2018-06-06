@@ -50,6 +50,3 @@ plt.title('Neural Net Position from Pax')
 plt.savefig('../EDM_Support/NN-Position'+time+'.png')
 
 
-
-
-
