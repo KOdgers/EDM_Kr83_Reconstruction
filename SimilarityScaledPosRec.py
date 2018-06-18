@@ -1,6 +1,6 @@
 import numpy as np
 import numpy.linalg
-from random import shuffle
+from random import shuffle, randint
 import matplotlib.pyplot as plt
 
 from time import gmtime, strftime
@@ -26,16 +26,27 @@ class Pattern(object):
         return self.pattern
 
     def get_sim_score(self, pattern, score_type):
+
+        ## Implement Quantum Efficiencies if not MonteCarlo Derived
+
         if not max(pattern):
             score = False
         elif score_type == 'BinaryDifference':
             sim_pattern = np.logical_xor(self.pattern, pattern)
             score = (sim_pattern == True).sum()
 
-        elif score_type == 'NormedDifferenceSum':
-            A = [i / sum(self.pattern) for i in self.pattern]  ## Should I use Sum or Max for Normalizaiton
-            B = [j / sum(pattern) for j in pattern]
+        elif score_type == 'Manhattan_Distance':
+            A = [i / max(self.pattern) for i in self.pattern]  ## Should I use Sum or Max for Normalizaiton
+            B = [j / max(pattern) for j in pattern]
             score = np.sum(np.abs(np.array(A) - np.array(B)))
+
+        elif score_type == 'RMS_Normed':
+            A = [i / max(self.pattern) for i in self.pattern]  ## Should I use Sum or Max for Normalizaiton
+            B = [j / max(pattern) for j in pattern]
+            score = np.sqrt(np.sum(np.square(np.subtract(np.array(A), np.array(B)))))
+
+        #### I need to implement Profile Likelihood Function from XENON Code
+
         else:
             score = False
 
@@ -64,15 +75,18 @@ class TpcRep(object):
         self.pattern_list = []
         self.distribution = np.array(1)
         self.empty = True
-        self.score = 'NormedDifferenceSum'  # Other options. BinaryDifference...
+        self.score = 'RMS_Normed' # 'Manhattan_Distance'  # Other options. BinaryDifference...
         self.tpc_radius = 50
         self.polar_dist = np.array(1)
         self.polar_dist_flipped = np.array(1)
+        self.polar_nn_dist = np.array(1)
 
     def give_events(self, events):
         if self.empty:
             print('Starting with ' + str(len(events)) + ' number of events')
-            unsorted_events = [x for i, x in enumerate(events) if max(x[0]) and i < 100]
+            number_of_events = 100
+            event_start = randint(100,len(events)-number_of_events)
+            unsorted_events = [x for i, x in enumerate(events) if max(x[0]) and event_start < i < (event_start+number_of_events)]
             self.edm = np.zeros((len(unsorted_events), len(unsorted_events)))
             self.edm[0, 0] = 0
             shuffle(unsorted_events)
@@ -113,11 +127,8 @@ class TpcRep(object):
 
     def cut_worse_5_percent(self):
         mean_score = np.mean(self.edm)
-
         mean_score_array = np.mean(self.edm, axis=1)
         dev_score = np.std(mean_score_array)
-        print(np.shape(mean_score_array))
-        print(mean_score, dev_score, mean_score_array)
         del_count = 0
         for i, score in enumerate(mean_score_array.tolist()):
             if score > mean_score + dev_score:
@@ -144,12 +155,12 @@ class TpcRep(object):
 
     def sklearn_mds(self):
         seed = np.random.RandomState(seed=3)
-        nmds = manifold.MDS(n_components=2, metric=False, max_iter=3000, eps=1e-12,
+        nmds = manifold.MDS(n_components=2, metric=False, max_iter=1000, eps=1e-12,
                             dissimilarity="precomputed", random_state=seed, n_jobs=1,
                             n_init=1)
 
-        mds = manifold.MDS(n_components=2, max_iter=3000, eps=1e-9, random_state=seed,
-                           dissimilarity="precomputed", n_jobs=1)
+        mds = manifold.MDS(n_components=2, max_iter=1000, eps=1e-9, random_state=seed,
+                           dissimilarity="precomputed", n_jobs=1,n_init = 10)
         pos = mds.fit(self.edm).embedding_
 
         npos = nmds.fit_transform(self.edm, init=pos)
@@ -158,7 +169,7 @@ class TpcRep(object):
         plt.title('Quick n Dirty Sklearn')
         plt.savefig('../EDM_Support/Sklearn' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
 
-        self.distribution = pos
+        self.distribution = npos
 
     def get_distribution(self):
         return self.distribution
@@ -227,18 +238,18 @@ class TpcRep(object):
         if ptype == 'cart':
             npos = self.distribution
             npos *= np.sqrt((X_nn ** 2).sum()) / np.sqrt((npos ** 2).sum())
-            title = 'Cartesian Plotting No Rotation'
+            the_title = 'Cartesian Plotting No Rotation'
         elif ptype == 'polar':
             npos = self.polar_dist
             npos = np.array([[npos[i, 0] * np.cos(npos[i, 1]),
                               npos[i, 0] * np.sin(npos[i, 1])] for i in range(len(npos))])
-            title = 'Polar Distribution W/ Phi Correction'
+            the_title = 'Polar Distribution W/ Phi Correction'
 
         elif ptype == 'polar_flipped':
             npos = self.polar_dist_flipped
             npos = np.array([[npos[i, 0] * np.cos(npos[i, 1]),
                               npos[i, 0] * np.sin(npos[i, 1])] for i in range(len(npos))])
-            title = 'Flipped Polar Distribution W/ Phi Correction'
+            the_title = 'Flipped Polar Distribution W/ Phi Correction'
 
         plt.figure(figsize=(6, 6))
         ax = plt.axes()
@@ -248,22 +259,22 @@ class TpcRep(object):
         plt.scatter(npos[:, 0], npos[:, 1], color='darkorange', s=s, lw=0, label='MDS Reconstructed')
         plt.legend(scatterpoints=1, loc='best', shadow=False)
 
-        similarities = self.edm.max() / self.edm * 100
-        similarities[np.isinf(similarities)] = 0
+        # similarities = self.edm.max() / self.edm * 100
+        # similarities[np.isinf(similarities)] = 0
 
         # Plot the edges
         segs = np.zeros((len(npos), 2, 2), float)
         segs[:, :, 1] = np.array([[npos[i, 1], X_nn[i, 1]] for i in range(len(npos))])
         segs[:, :, 0] = np.array([[npos[i, 0], X_nn[i, 0]] for i in range(len(npos))])
 
-        values = np.abs(similarities)
+        # values = np.abs(similarities)
         lc = LineCollection(segs,
-                            zorder=0, cmap=plt.cm.Blues,
-                            norm=plt.Normalize(0, values.max()))
-        lc.set_array(similarities.flatten())
+                            zorder=0, cmap=plt.cm.Blues)#,
+                            #norm=plt.Normalize(0, values.max()))
+        # lc.set_array(similarities.flatten())
         lc.set_linewidths(2 * np.ones(len(segs)))
         ax.add_collection(lc)
-        plt.title(title)
+        plt.title(the_title)
         plt.savefig('../EDM_Support/' + ptype + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
         plt.close()
 
@@ -272,27 +283,50 @@ class TpcRep(object):
         npos = self.distribution
         self.polar_dist = np.zeros_like(self.distribution)
         self.polar_dist_flipped = np.zeros_like(self.distribution)
+        self.polar_nn_dist = np.zeros_like(self.distribution)
+
         npos *= np.sqrt((X_nn ** 2).sum()) / np.sqrt((npos ** 2).sum())
         x_dist = np.array([X_nn[i, 0] ** 2 + X_nn[i, 1] ** 2 for i in range(0, len(X_nn))])
         origin_index = np.argmin(x_dist)
         npos = np.array(
             [[npos[i, 0] - npos[origin_index, 0], npos[i, 1] - npos[origin_index, 1]] for i in range(len(npos))])
         for i in range(0, len(npos)):
-            switch = 0
-            if npos[i, 0] < 0:
-                switch = 3.1415
+            theta = np.abs(np.arctan(
+                (npos[i, 1] - npos[origin_index, 1]) / (npos[i, 0] - npos[origin_index, 0])))
+            theta2 = np.abs(np.arctan(
+                (X_nn[i, 1] - X_nn[origin_index, 1]) / (X_nn[i, 0] - X_nn[origin_index, 0])))
+            if npos[i, 0] > 0:
+                if npos[i, 1] < 0:
+                    theta = 2*np.pi-theta
+            elif npos[i,0]<=0:
+                if npos[i, 1] > 0:
+                    theta = np.pi - theta
+                else:
+                    theta = np.pi + theta
+
+            if X_nn[i, 0] > 0:
+                if X_nn[i, 1] < 0:
+                    theta2 = 2*np.pi-theta2
+
+            else:
+                if X_nn[i, 1] > 0:
+                    theta2 = np.pi - theta2
+                else:
+                    theta2 = np.pi + theta2
+
             self.polar_dist[i, 0] = np.sqrt((npos[i, 0] - npos[origin_index, 0]) ** 2 +
                                             (npos[i, 1] - npos[origin_index, 1]) ** 2)
+            self.polar_nn_dist[i, 0] = np.sqrt((X_nn[i, 0] - X_nn[origin_index, 0]) ** 2 +
+                                            (X_nn[i, 1] - X_nn[origin_index, 1]) ** 2)
             self.polar_dist_flipped[i, 0] = self.polar_dist[i, 0]
-            self.polar_dist[i, 1] = switch + np.arctan(
-                (npos[i, 1] - npos[origin_index, 1]) / (npos[i, 0] - npos[origin_index, 0]))
-            self.polar_dist_flipped[i, 1] = -1 * self.polar_dist[i, 1]
+            self.polar_dist[i, 1] = theta%(2*np.pi)
+            self.polar_nn_dist[i, 1] = theta2%(2*np.pi)
+            self.polar_dist_flipped[i, 1] = 2*np.pi-1 * self.polar_dist[i, 1]
         x_dist = np.array([(50 - X_nn[i, 0]) ** 2 + X_nn[i, 1] ** 2 for i in range(0, len(X_nn))])
         second_index = np.argmin(x_dist)
         phi_edm = self.polar_dist[second_index, 1]
         phi_edm_flipped = self.polar_dist_flipped[second_index, 1]
-        phi_nn = np.arctan(
-            (X_nn[second_index, 1] - X_nn[origin_index, 1]) / (X_nn[second_index, 0] - X_nn[origin_index, 0]))
+        phi_nn = self.polar_nn_dist[second_index, 1]
 
         phi_shift = phi_nn - phi_edm
         phi_shift2 = phi_nn - phi_edm_flipped
@@ -300,3 +334,43 @@ class TpcRep(object):
         for i in range(len(npos)):
             self.polar_dist[i, 1] = self.polar_dist[i, 1] + phi_shift
             self.polar_dist_flipped[i, 1] = self.polar_dist_flipped[i, 1] + phi_shift2
+
+    def get_polar_errors(self):
+        plt.figure(11, figsize=(9, 4))
+        plt.title('Errors (Un-mirrored, Mirrored)')
+        for j in range(0, 2):
+            edm_dist = self.polar_dist_flipped
+            ptype = 'flipped'
+            if j == 0:
+                edm_dist = self.polar_dist
+                ptype = 'not_flipped'
+                print('yup')
+            else:
+                print('also yup')
+
+            theta_err = np.zeros(len(edm_dist))
+            rad_err = np.zeros(len(edm_dist))
+
+            for i in range(len(edm_dist)):
+                ang_err = np.pi-np.abs(np.abs(edm_dist[i, 1]-self.polar_nn_dist[i, 1])-np.pi)
+                direction = 1
+                if (np.abs(edm_dist[i,1]-self.polar_nn_dist[i,1])>(edm_dist[i,1]-self.polar_nn_dist[i,1]) and
+                    np.abs(edm_dist[i, 1] - self.polar_nn_dist[i, 1])>ang_err):
+                    direction = -1
+
+                theta_err[i] = direction*ang_err
+                rad_err[i] = edm_dist[i, 0]-self.polar_nn_dist[i,0]
+
+            plt.subplot(1, 2, j+1)
+            plt.xlabel('Difference in Radii [cm]')
+            plt.ylabel('Error in Angle [rad]')
+            plt.plot(rad_err, theta_err, '.')
+
+        plt.xlabel('Difference in Radii [cm]')
+        plt.ylabel('Error in Angle [rad]')
+        plt.savefig('../EDM_Support/Errs'+strftime("%m_%d_%H:%M:%S", gmtime())+'.png')
+        plt.close()
+        return
+
+
+

@@ -29,6 +29,7 @@ tpc.cut_worse_5_percent()
 tpc.sklearn_mds()
 # tpc.plot_edm_nn()
 tpc.translation_scaling_rotation()
+tpc.get_polar_errors()
 
 sleep(1)
 tpc.plot_edm_nn('cart')
