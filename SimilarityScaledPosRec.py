@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.linalg
+import numexpr as ne
 from random import shuffle, randint
 import matplotlib.pyplot as plt
 
@@ -9,7 +10,7 @@ from matplotlib.collections import LineCollection
 
 from sklearn import manifold
 
-
+from TPC_Configuration import active_pmts
 # from sklearn.decomposition import PCA
 
 class Pattern(object):
@@ -25,7 +26,7 @@ class Pattern(object):
     def get_pattern(self):
         return self.pattern
 
-    def get_sim_score(self, pattern, score_type):
+    def get_sim_score(self, pattern, score_type,pmt_selection):
 
         ## Implement Quantum Efficiencies if not MonteCarlo Derived
 
@@ -44,6 +45,8 @@ class Pattern(object):
             A = [i / max(self.pattern) for i in self.pattern]  ## Should I use Sum or Max for Normalizaiton
             B = [j / max(pattern) for j in pattern]
             score = np.sqrt(np.sum(np.square(np.subtract(np.array(A), np.array(B)))))
+        elif score_type == 'Pattern_Fitter':
+            score = self.get_gof_pattern_fitter(pattern,pmt_selection, 'likelihood_poisson')
 
         #### I need to implement Profile Likelihood Function from XENON Code
 
@@ -51,6 +54,40 @@ class Pattern(object):
             score = False
 
         return score
+
+    def get_gof_pattern_fitter(self, pattern, pmt_selection, statistic):
+
+        areas_observed = np.array([item for i, item in enumerate(pattern) if i in pmt_selection])
+        q = np.array([item for i, item in enumerate(self.pattern) if i in pmt_selection])
+        square_syst_errors = (0 * areas_observed) ** 2
+
+        qsum = q.sum(axis=-1)[..., np.newaxis]  # noqa
+        fractions_expected = ne.evaluate("q / qsum")  # noqa
+        total_observed = areas_observed.sum()  # noqa
+        ao = areas_observed  # noqa
+        # square_syst_errors = square_syst_errors[pmt_selection]  # noqa
+
+        # The actual goodness of fit computation is here...
+        # Areas expected = fractions_expected * sum(areas_observed)
+        if statistic == 'chi2gamma':
+            result = ne.evaluate("(ao + where(ao > 1, 1, ao) - {ae})**2 /"
+                                 "({ae} + square_syst_errors + 1)".format(ae='fractions_expected * total_observed'))
+        elif statistic == 'chi2':
+            result = ne.evaluate("(ao - {ae})**2 /"
+                                 "({ae} + square_syst_errors)".format(ae='fractions_expected * total_observed'))
+        elif statistic == 'likelihood_poisson':
+            # Poisson likelihood chi-square (Baker and Cousins, 1984)
+            # Clip areas to range [0.0001, +inf), because of log(0)
+            areas_expected_clip = np.clip(fractions_expected * total_observed, 1e-10, float('inf'))
+            areas_observed_clip = np.clip(areas_observed, 1e-10, float('inf'))
+            result = ne.evaluate("-2*({ao} * log({ae}/{ao}) + {ao} - {ae})".format(ae='areas_expected_clip',
+                                                                                   ao='areas_observed_clip'))
+        else:
+            raise ValueError('Pattern goodness of fit statistic %s not implemented!' % statistic)
+
+        return np.sum(result, axis=-1)
+
+
 
     def set_position(self, x, y):
         self.x_pos = x
@@ -75,27 +112,28 @@ class TpcRep(object):
         self.pattern_list = []
         self.distribution = np.array(1)
         self.empty = True
-        self.score = 'RMS_Normed' # 'Manhattan_Distance'  # Other options. BinaryDifference...
+        self.score = 'Pattern_Fitter'  # 'RMS_Normed' 'Manhattan_Distance'  # Other options. BinaryDifference...
         self.tpc_radius = 50
         self.polar_dist = np.array(1)
         self.polar_dist_flipped = np.array(1)
         self.polar_nn_dist = np.array(1)
+        self.pmt_selection = active_pmts
 
     def give_events(self, events):
         if self.empty:
             print('Starting with ' + str(len(events)) + ' number of events')
-            number_of_events = 100
-            event_start = randint(100,len(events)-number_of_events)
+            number_of_events = 400
+            event_start = randint(100, len(events)-number_of_events)
             unsorted_events = [x for i, x in enumerate(events) if max(x[0]) and event_start < i < (event_start+number_of_events)]
             self.edm = np.zeros((len(unsorted_events), len(unsorted_events)))
             self.edm[0, 0] = 0
             shuffle(unsorted_events)
             unsorted_events, unsorted_x, unsorted_y = zip(*unsorted_events)  # Unzip the pattern, x and y after shuffle
-            unsorted_events = [x.tolist() for x in unsorted_events]
+            unsorted_events = [x.tolist()[0:127] for x in unsorted_events]
             self.pattern_list.append(Pattern(0, unsorted_events[0]))
             self.pattern_list[0].set_nn_position(unsorted_x[0], unsorted_y[0])
 
-            temp_similarity = [self.pattern_list[0].get_sim_score(item, self.score) for item in unsorted_events]
+            temp_similarity = [self.pattern_list[0].get_sim_score(item, self.score, active_pmts) for item in unsorted_events]
             events_list = [x for _, x in sorted(zip(temp_similarity, unsorted_events))]
             events_x = [x for _, x in sorted(zip(temp_similarity, unsorted_x))]
             events_y = [x for _, x in sorted(zip(temp_similarity, unsorted_y))]
@@ -104,7 +142,7 @@ class TpcRep(object):
             for i, item in enumerate(events_list[1:]):
                 if max(item) > 0:
                     for j, item2 in enumerate(self.pattern_list[:i]):
-                        self.edm[i, j] = item2.get_sim_score(item, self.score)
+                        self.edm[i, j] = item2.get_sim_score(item, self.score, active_pmts)
                         self.edm[j, i] = self.edm[i, j]
                     self.pattern_list.append(Pattern(i, item))
                     self.pattern_list[i].set_nn_position(events_x[i], events_y[i])
@@ -185,6 +223,9 @@ class TpcRep(object):
         Y = [item.get_nn_position()[1] for item in self.pattern_list]
 
         return X, Y
+
+    def get_patterns(self):
+        return self.pattern_list
 
     def plot_edm_recon(self, cuts=True):
         data = self.get_distribution()

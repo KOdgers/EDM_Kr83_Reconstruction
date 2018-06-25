@@ -1,4 +1,5 @@
 from SimilarityScaledPosRec import *
+from EDM_Dev_Analysis import *
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -28,13 +29,19 @@ tpc.give_events(Events)
 tpc.cut_worse_5_percent()
 tpc.sklearn_mds()
 # tpc.plot_edm_nn()
-tpc.translation_scaling_rotation()
-tpc.get_polar_errors()
+posrec_analysis = MC_EDM_Comp()
+posrec_analysis.set_distributions(tpc.get_distribution(), tpc.get_nn_distribution(), tpc.get_patterns())
+
+posrec_analysis.corrections()
+posrec_analysis.get_polar_errors()
 
 sleep(1)
-tpc.plot_edm_nn('cart')
-tpc.plot_edm_nn('polar')
-tpc.plot_edm_nn('polar_flipped')
+posrec_analysis.plot_edm_nn('cart')
+posrec_analysis.plot_edm_nn('polar')
+posrec_analysis.plot_edm_nn('polar_flipped')
+posrec_analysis.make_pmt_position_maps()
+
+
 # tpc.plot_edm_recon(cuts=True)
 
 # distribution = tpc.get_distribution()
