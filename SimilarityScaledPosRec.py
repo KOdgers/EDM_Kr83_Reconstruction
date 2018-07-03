@@ -10,8 +10,8 @@ from matplotlib.collections import LineCollection
 
 from sklearn import manifold
 
-from TPC_Configuration import active_pmts
-# from sklearn.decomposition import PCA
+from TPC_Configuration import *
+
 
 class Pattern(object):
 
@@ -119,10 +119,10 @@ class TpcRep(object):
         self.polar_nn_dist = np.array(1)
         self.pmt_selection = active_pmts
 
-    def give_events(self, events):
+    def give_events(self, events, number_of_events):
         if self.empty:
             print('Starting with ' + str(len(events)) + ' number of events')
-            number_of_events = 400
+            # number_of_events = 400
             event_start = randint(100, len(events)-number_of_events)
             unsorted_events = [x for i, x in enumerate(events) if max(x[0]) and event_start < i < (event_start+number_of_events)]
             self.edm = np.zeros((len(unsorted_events), len(unsorted_events)))
@@ -134,26 +134,32 @@ class TpcRep(object):
             self.pattern_list[0].set_nn_position(unsorted_x[0], unsorted_y[0])
 
             temp_similarity = [self.pattern_list[0].get_sim_score(item, self.score, active_pmts) for item in unsorted_events]
-            events_list = [x for _, x in sorted(zip(temp_similarity, unsorted_events))]
-            events_x = [x for _, x in sorted(zip(temp_similarity, unsorted_x))]
-            events_y = [x for _, x in sorted(zip(temp_similarity, unsorted_y))]
+            events_list = unsorted_events
+            events_x = unsorted_x
+            events_y = unsorted_y
+
+            # events_list = [x for _, x in sorted(zip(temp_similarity, unsorted_events), reverse=True)]
+            # events_x = [x for _, x in sorted(zip(temp_similarity, unsorted_x), reverse=True)]
+            # events_y = [x for _, x in sorted(zip(temp_similarity, unsorted_y), reverse=True)]
             print('Finished shuffling. ' + str(len(unsorted_events)) + ' Events are left.')
             quarter, half, three_quarter = False, False, False
             for i, item in enumerate(events_list[1:]):
+                I = i+1
+                # print(i)
                 if max(item) > 0:
-                    for j, item2 in enumerate(self.pattern_list[:i]):
-                        self.edm[i, j] = item2.get_sim_score(item, self.score, active_pmts)
-                        self.edm[j, i] = self.edm[i, j]
-                    self.pattern_list.append(Pattern(i, item))
-                    self.pattern_list[i].set_nn_position(events_x[i], events_y[i])
+                    for j, item2 in enumerate(self.pattern_list[:I]):
+                        self.edm[I, j] = item2.get_sim_score(item, self.score, active_pmts)
+                        self.edm[j, I] = self.edm[I, j]
+                    self.pattern_list.append(Pattern(I, item))
+                    self.pattern_list[I].set_nn_position(events_x[I], events_y[I])
 
-                if i / len(events_list) > .25 and not quarter:
+                if I / len(events_list) > .25 and not quarter:
                     print('Finished a quarter of EDM')
                     quarter = True
-                elif i / len(events_list) > .5 and not half:
+                elif I / len(events_list) > .5 and not half:
                     print('Finsiehd half of the EDM')
                     half = True
-                elif i / len(events_list) > .75 and not three_quarter:
+                elif I / len(events_list) > .75 and not three_quarter:
                     print('Finished Three Quarters of the EDM')
                     three_quarter = True
 
@@ -169,12 +175,22 @@ class TpcRep(object):
         dev_score = np.std(mean_score_array)
         del_count = 0
         for i, score in enumerate(mean_score_array.tolist()):
-            if score > mean_score + dev_score:
+            if score < mean_score - 1.5*dev_score or score > mean_score + 1.5*dev_score:
                 del self.pattern_list[i - del_count]
                 self.edm = np.delete(self.edm, i - del_count, 0)
                 self.edm = np.delete(self.edm, i - del_count, 1)
                 del_count += 1
+        plt.figure()
+        plt.plot(mean_score_array, '*')
+        plt.show()
+        plt.close()
+        mean_score_array = np.mean(self.edm, axis=1)
+        plt.figure()
+        plt.plot(mean_score_array, '*')
+        plt.show()
+        plt.close()
 
+        print(np.shape(self.edm))
         print('There are ' + str(len(self.pattern_list)) + ' events left after cuts')
 
     def mds_classic(self):
@@ -193,21 +209,35 @@ class TpcRep(object):
 
     def sklearn_mds(self):
         seed = np.random.RandomState(seed=3)
-        nmds = manifold.MDS(n_components=2, metric=False, max_iter=1000, eps=1e-12,
+        nmds = manifold.MDS(n_components=2, metric=False, max_iter=2000, eps=1e-12,
                             dissimilarity="precomputed", random_state=seed, n_jobs=1,
                             n_init=1)
 
-        mds = manifold.MDS(n_components=2, max_iter=1000, eps=1e-9, random_state=seed,
+        mds = manifold.MDS(n_components=2, max_iter=2000, eps=1e-12, random_state=seed,
                            dissimilarity="precomputed", n_jobs=1,n_init = 10)
-        pos = mds.fit(self.edm).embedding_
+        npos = mds.fit_transform(self.edm)#.embedding_
 
-        npos = nmds.fit_transform(self.edm, init=pos)
+        # npos = nmds.fit_transform(self.edm, init=pos)
         plt.figure(10)
         plt.scatter(npos[:, 0], npos[:, 1], color='darkorange', lw=0, label='NMDS')
         plt.title('Quick n Dirty Sklearn')
         plt.savefig('../EDM_Support/Sklearn' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
 
         self.distribution = npos
+
+
+    def sklearn_local_linear(self):
+        # model = manifold.LocallyLinearEmbedding(n_neighbors=100, n_components=2, method='modified',
+        #                                eigen_solver='dense')
+        model = manifold.Isomap(n_neighbors=200, n_components=2,
+                                                eigen_solver='dense')
+        out = model.fit_transform(self.edm)
+        plt.figure(10)
+        plt.scatter(out[:, 0], out[:, 1], color='darkorange', lw=0, label='NMDS')
+        plt.title('local linear')
+        plt.savefig('../EDM_Support/SklearnLLE' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
+
+        self.distribution = out
 
     def get_distribution(self):
         return self.distribution
@@ -226,192 +256,5 @@ class TpcRep(object):
 
     def get_patterns(self):
         return self.pattern_list
-
-    def plot_edm_recon(self, cuts=True):
-        data = self.get_distribution()
-
-        data_split = [[data[i, 0], data[i, 1]] for i in range(0, len(data))]
-        X = [item[0] for item in data_split]
-        Y = [item[1] for item in data_split]
-        plt.figure(1, figsize=(4, 4))
-        plt.plot(X, Y, '.')
-        plt.xlabel('X - unscaled [N/A]')
-        plt.ylabel('Y - unscaled [N/A]')
-        plt.title('Unscaled EDM Reconstructed Distribution')
-        time = strftime("%m_%d_%H:%M:%S", gmtime())
-        plt.savefig('../EDM_Support/FuckIt' + time + '.png')
-
-        if cuts:
-            for l in range(0, 2):
-                x_mean = np.mean(X)
-                y_mean = np.mean(Y)
-                x_sig = np.std(X)
-                y_sig = np.std(Y)
-                # print(len(data),len(data[0]))
-                data_cut = [[X[i], Y[i]] for i in range(0, len(X)) if
-                            (np.abs(X[i]) < x_mean + 2 * x_sig) and
-                            (np.abs(Y[i]) < y_mean + 2 * y_sig)]
-                print(len(data_cut), len(data_cut[0]))
-                X = [item[0] for item in data_cut]
-                Y = [item[1] for item in data_cut]
-
-                x_mean = np.mean(X)
-                y_mean = np.mean(Y)
-                x_scale = 100 / (max(X) - min(X))
-                y_scale = 100 / (max(Y) - min(Y))
-
-                # x_scale, y_scale = 1, 1
-
-                X = ([(item - x_mean) * x_scale for item in X])
-                Y = ([(item - y_mean) * y_scale for item in Y])
-
-        plt.figure(2, figsize=(4, 4))
-        plt.plot(X, Y, '.')
-        plt.xlabel('X - unscaled [N/A]')
-        plt.ylabel('Y - unscaled [N/A]')
-        plt.title('Scaled EDM Reconstructed Distribution')
-        time = strftime("%m_%d_%H:%M:%S", gmtime())
-        plt.savefig('../EDM_Support/FuckItLetsGo' + time + '.png')
-
-    def plot_edm_nn(self, ptype):
-        # Rescale the data
-        X_nn = self.get_nn_distribution()
-        if ptype == 'cart':
-            npos = self.distribution
-            npos *= np.sqrt((X_nn ** 2).sum()) / np.sqrt((npos ** 2).sum())
-            the_title = 'Cartesian Plotting No Rotation'
-        elif ptype == 'polar':
-            npos = self.polar_dist
-            npos = np.array([[npos[i, 0] * np.cos(npos[i, 1]),
-                              npos[i, 0] * np.sin(npos[i, 1])] for i in range(len(npos))])
-            the_title = 'Polar Distribution W/ Phi Correction'
-
-        elif ptype == 'polar_flipped':
-            npos = self.polar_dist_flipped
-            npos = np.array([[npos[i, 0] * np.cos(npos[i, 1]),
-                              npos[i, 0] * np.sin(npos[i, 1])] for i in range(len(npos))])
-            the_title = 'Flipped Polar Distribution W/ Phi Correction'
-
-        plt.figure(figsize=(6, 6))
-        ax = plt.axes()
-        s = 100
-        plt.scatter(X_nn[:, 0], X_nn[:, 1], color='navy', s=s, lw=0,
-                    label='NN Reconstructed')
-        plt.scatter(npos[:, 0], npos[:, 1], color='darkorange', s=s, lw=0, label='MDS Reconstructed')
-        plt.legend(scatterpoints=1, loc='best', shadow=False)
-
-        # similarities = self.edm.max() / self.edm * 100
-        # similarities[np.isinf(similarities)] = 0
-
-        # Plot the edges
-        segs = np.zeros((len(npos), 2, 2), float)
-        segs[:, :, 1] = np.array([[npos[i, 1], X_nn[i, 1]] for i in range(len(npos))])
-        segs[:, :, 0] = np.array([[npos[i, 0], X_nn[i, 0]] for i in range(len(npos))])
-
-        # values = np.abs(similarities)
-        lc = LineCollection(segs,
-                            zorder=0, cmap=plt.cm.Blues)#,
-                            #norm=plt.Normalize(0, values.max()))
-        # lc.set_array(similarities.flatten())
-        lc.set_linewidths(2 * np.ones(len(segs)))
-        ax.add_collection(lc)
-        plt.title(the_title)
-        plt.savefig('../EDM_Support/' + ptype + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
-        plt.close()
-
-    def translation_scaling_rotation(self):
-        X_nn = self.get_nn_distribution()
-        npos = self.distribution
-        self.polar_dist = np.zeros_like(self.distribution)
-        self.polar_dist_flipped = np.zeros_like(self.distribution)
-        self.polar_nn_dist = np.zeros_like(self.distribution)
-
-        npos *= np.sqrt((X_nn ** 2).sum()) / np.sqrt((npos ** 2).sum())
-        x_dist = np.array([X_nn[i, 0] ** 2 + X_nn[i, 1] ** 2 for i in range(0, len(X_nn))])
-        origin_index = np.argmin(x_dist)
-        npos = np.array(
-            [[npos[i, 0] - npos[origin_index, 0], npos[i, 1] - npos[origin_index, 1]] for i in range(len(npos))])
-        for i in range(0, len(npos)):
-            theta = np.abs(np.arctan(
-                (npos[i, 1] - npos[origin_index, 1]) / (npos[i, 0] - npos[origin_index, 0])))
-            theta2 = np.abs(np.arctan(
-                (X_nn[i, 1] - X_nn[origin_index, 1]) / (X_nn[i, 0] - X_nn[origin_index, 0])))
-            if npos[i, 0] > 0:
-                if npos[i, 1] < 0:
-                    theta = 2*np.pi-theta
-            elif npos[i,0]<=0:
-                if npos[i, 1] > 0:
-                    theta = np.pi - theta
-                else:
-                    theta = np.pi + theta
-
-            if X_nn[i, 0] > 0:
-                if X_nn[i, 1] < 0:
-                    theta2 = 2*np.pi-theta2
-
-            else:
-                if X_nn[i, 1] > 0:
-                    theta2 = np.pi - theta2
-                else:
-                    theta2 = np.pi + theta2
-
-            self.polar_dist[i, 0] = np.sqrt((npos[i, 0] - npos[origin_index, 0]) ** 2 +
-                                            (npos[i, 1] - npos[origin_index, 1]) ** 2)
-            self.polar_nn_dist[i, 0] = np.sqrt((X_nn[i, 0] - X_nn[origin_index, 0]) ** 2 +
-                                            (X_nn[i, 1] - X_nn[origin_index, 1]) ** 2)
-            self.polar_dist_flipped[i, 0] = self.polar_dist[i, 0]
-            self.polar_dist[i, 1] = theta%(2*np.pi)
-            self.polar_nn_dist[i, 1] = theta2%(2*np.pi)
-            self.polar_dist_flipped[i, 1] = 2*np.pi-1 * self.polar_dist[i, 1]
-        x_dist = np.array([(50 - X_nn[i, 0]) ** 2 + X_nn[i, 1] ** 2 for i in range(0, len(X_nn))])
-        second_index = np.argmin(x_dist)
-        phi_edm = self.polar_dist[second_index, 1]
-        phi_edm_flipped = self.polar_dist_flipped[second_index, 1]
-        phi_nn = self.polar_nn_dist[second_index, 1]
-
-        phi_shift = phi_nn - phi_edm
-        phi_shift2 = phi_nn - phi_edm_flipped
-
-        for i in range(len(npos)):
-            self.polar_dist[i, 1] = self.polar_dist[i, 1] + phi_shift
-            self.polar_dist_flipped[i, 1] = self.polar_dist_flipped[i, 1] + phi_shift2
-
-    def get_polar_errors(self):
-        plt.figure(11, figsize=(9, 4))
-        plt.title('Errors (Un-mirrored, Mirrored)')
-        for j in range(0, 2):
-            edm_dist = self.polar_dist_flipped
-            ptype = 'flipped'
-            if j == 0:
-                edm_dist = self.polar_dist
-                ptype = 'not_flipped'
-                print('yup')
-            else:
-                print('also yup')
-
-            theta_err = np.zeros(len(edm_dist))
-            rad_err = np.zeros(len(edm_dist))
-
-            for i in range(len(edm_dist)):
-                ang_err = np.pi-np.abs(np.abs(edm_dist[i, 1]-self.polar_nn_dist[i, 1])-np.pi)
-                direction = 1
-                if (np.abs(edm_dist[i,1]-self.polar_nn_dist[i,1])>(edm_dist[i,1]-self.polar_nn_dist[i,1]) and
-                    np.abs(edm_dist[i, 1] - self.polar_nn_dist[i, 1])>ang_err):
-                    direction = -1
-
-                theta_err[i] = direction*ang_err
-                rad_err[i] = edm_dist[i, 0]-self.polar_nn_dist[i,0]
-
-            plt.subplot(1, 2, j+1)
-            plt.xlabel('Difference in Radii [cm]')
-            plt.ylabel('Error in Angle [rad]')
-            plt.plot(rad_err, theta_err, '.')
-
-        plt.xlabel('Difference in Radii [cm]')
-        plt.ylabel('Error in Angle [rad]')
-        plt.savefig('../EDM_Support/Errs'+strftime("%m_%d_%H:%M:%S", gmtime())+'.png')
-        plt.close()
-        return
-
 
 

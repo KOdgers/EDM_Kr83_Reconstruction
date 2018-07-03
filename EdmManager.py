@@ -10,10 +10,10 @@ from time import time, sleep
 events_tree = pd.read_hdf('/home/kelly/PycharmProjects/EDM_Support/Kr83m_s2_Areas_10Runs_10_20.h5', key='Kr83m')
 
 events_tree = events_tree.loc[lambda df: df.int_a_z_3d_nn < -10, :]
-events_tree = events_tree.loc[lambda df: df.int_a_z_3d_nn > -15, :]
+events_tree = events_tree.loc[lambda df: df.int_a_z_3d_nn > -12, :]
 print(len(events_tree))
 
-events_tree = events_tree.loc[lambda df: df.s2_b < 15000, :]
+events_tree = events_tree.loc[lambda df: df.s2_b < 1000, :]
 
 
 
@@ -24,38 +24,36 @@ Events = list(zip(event_list, event_x, event_y))
 print(len(event_list))
 
 tpc = TpcRep()
-tpc.give_events(Events)
+tpc.give_events(Events, 400)
 
 tpc.cut_worse_5_percent()
 tpc.sklearn_mds()
-# tpc.plot_edm_nn()
+# posrec_analysis = MC_EDM_Comp()
+# posrec_analysis.set_distributions(tpc.get_distribution(), tpc.get_nn_distribution(), tpc.get_patterns())
+#
+# posrec_analysis.corrections()
+# posrec_analysis.get_polar_errors()
+# posrec_analysis.get_edm_cart()
+# mean_err, std_err = posrec_analysis.get_cart_error()
+# print(mean_err, std_err)
+# sleep(1)
+# posrec_analysis.plot_edm_nn('polar')
+# posrec_analysis.plot_edm_nn('polar_flipped')
+
+#
+# tpc.sklearn_local_linear()
 posrec_analysis = MC_EDM_Comp()
 posrec_analysis.set_distributions(tpc.get_distribution(), tpc.get_nn_distribution(), tpc.get_patterns())
 
 posrec_analysis.corrections()
 posrec_analysis.get_polar_errors()
-
+posrec_analysis.get_edm_cart()
+mean_err, std_err = posrec_analysis.get_cart_error()
+print(mean_err, std_err)
 sleep(1)
-posrec_analysis.plot_edm_nn('cart')
 posrec_analysis.plot_edm_nn('polar')
 posrec_analysis.plot_edm_nn('polar_flipped')
-posrec_analysis.make_pmt_position_maps()
+# posrec_analysis.make_pmt_position_maps()
 
-
-# tpc.plot_edm_recon(cuts=True)
-
-# distribution = tpc.get_distribution()
-# nn_dist = tpc.get_nn_distribution()
-# #
-# time = strftime("%m_%d_%H:%M", gmtime())
-# # Plotting Unscaled Distribution #########
-#
-#
-# plt.figure(3, figsize=(4, 4))
-# plt.plot(nn_dist[:, 0], nn_dist[:, 1], '*')
-# plt.xlabel(' X-ish ')
-# plt.ylabel(' Y-ish ')
-# plt.title('Neural Net Position from Pax')
-# plt.savefig('../EDM_Support/NN-Position'+time+'.png')
 
 
