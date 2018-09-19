@@ -3,7 +3,7 @@ import logging
 from SimilarityScaledPosRec import *
 from EDM_Dev_Analysis import *
 from DimensionReduction import *
-from Preprocessing_PMT_Patterns import *
+from Preprocessing_Patterns import *
 import numpy as np
 import pandas as pd
 from time import time,strftime,gmtime
