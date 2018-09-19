@@ -11,7 +11,7 @@ from matplotlib.collections import LineCollection
 
 from sklearn import manifold
 
-from TPC_Configuration import *
+from TPC_Config import *
 
 
 

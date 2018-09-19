@@ -1,4 +1,4 @@
-from TPC_Configuration import *
+from TPC_Config import *
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -121,10 +121,3 @@ def fix_dead_pmts(dead_pmts, comp_pmts,comp_pmts_check, event_dataframe):
         events = events.tolist()
     return events
 
-
-# better_pmt_array = fix_dead_pmts(double_dead,double_dead_comp, double_dead_comp_check,events_tree)
-# events_tree['s2_area_array'] = better_pmt_array
-# better_pmt_array = fix_dead_pmts(single_dead,single_dead_comp,single_dead_comp_check,events_tree)
-# events_tree['s2_area_array'] = better_pmt_array
-#
-# events_tree.to_hdf(plot_path+'reincarnated_pmts.h5',key='df', mode='w')
