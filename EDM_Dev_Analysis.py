@@ -12,16 +12,30 @@ import os
 
 class MC_EDM_Comp:
 
-    def __init__(self):
-        self.edm_distribution =[]
-        self.nn_distribution =[]
-        self.edm_patterns =[]
+    def __init__(self, plot_path):
+        self.edm_distribution = []
+        self.nn_distribution = []
+        self.edm_patterns = []
         self.flip = False
+        self.plot_path = plot_path
 
-    def set_distributions(self, edm, nn, edm_patterns):
-        self.edm_distribution = edm
-        self.nn_distribution = nn
-        self.edm_patterns= edm_patterns
+
+    def save_corrected_distribution(self, time):
+        if not os.path.exists(self.plot_path+time+'/'):
+            os.mkdir(self.plot_path+time+'/')
+        np.save(self.plot_path+time+'/'+'EDM_Corrected_Distribution.npy',self.edm_distribution)
+
+
+    def load_distributions(self, time):
+        self.edm_distribution = np.load(self.plot_path+time+'/'+'EDM_Distribution.npy')
+        self.nn_distribution = np.load(self.plot_path+time+'/'+'NN.npy')
+        self.edm_patterns = np.load(self.plot_path+time+'/'+'Pattern_List.npy')
+
+    def load_edm_distribution(self, time):
+        self.edm_distribution = np.load(self.plot_path+time+'/'+'EDM_Distribution.npy')
+
+    def load_corrected_distribution(self,time):
+        self.edm_distribution = np.load(self.plot_path+time+'/'+'EDM_Corrected_Distribution.npy')
 
     def plot_edm_nn(self, ptype):
         # Rescale the data
@@ -66,7 +80,7 @@ class MC_EDM_Comp:
         lc.set_linewidths(2 * np.ones(len(segs)))
         ax.add_collection(lc)
         plt.title(the_title)
-        plt.savefig('../EDM_Support/' + ptype + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
+        plt.savefig(self.plot_path + ptype + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
         plt.close()
 
     def translation_scaling_rotation_nn(self):
@@ -128,9 +142,8 @@ class MC_EDM_Comp:
         for i in range(len(npos)):
             self.polar_dist[i, 1] = self.polar_dist[i, 1] + phi_shift
             self.polar_dist_flipped[i, 1] = self.polar_dist_flipped[i, 1] + phi_shift2
-        self.pmt_pattern_map(origin_index, self.polar_dist[origin_index, :], self.polar_nn_dist[origin_index, :], '../EDM_Support/')
-        self.pmt_pattern_map(second_index, self.polar_dist[second_index, :], self.polar_nn_dist[second_index, :], '../EDM_Support/')
-
+        self.pmt_pattern_map(origin_index, self.polar_dist[origin_index, :], self.polar_nn_dist[origin_index, :], self.plot_path)
+        self.pmt_pattern_map(second_index, self.polar_dist[second_index, :], self.polar_nn_dist[second_index, :], self.plot_path)
 
     def tsr(self):
         """
@@ -224,28 +237,26 @@ class MC_EDM_Comp:
         for i in range(len(npos)):
             self.polar_dist[i, 1] = self.polar_dist[i, 1] - phi_edm
             self.polar_dist_flipped[i, 1] = self.polar_dist_flipped[i, 1] - phi_edm_flipped
-        # self.pmt_pattern_map(origin_index, self.polar_dist[origin_index, :], self.polar_nn_dist[origin_index, :], '../EDM_Support/')
-        self.pmt_pattern_map(second_index, self.polar_dist[second_index, :], self.polar_nn_dist[second_index, :], '../EDM_Support/','')
-        self.pmt_pattern_map(second_index, self.polar_dist_flipped[second_index, :], self.polar_nn_dist[second_index, :], '../EDM_Support/','Flipped')
+        # self.pmt_pattern_map(origin_index, self.polar_dist[origin_index, :], self.polar_nn_dist[origin_index, :], self.plot_path)
+        self.pmt_pattern_map(second_index, self.polar_dist[second_index, :], self.polar_nn_dist[second_index, :], self.plot_path,'')
+        self.pmt_pattern_map(second_index, self.polar_dist_flipped[second_index, :], self.polar_nn_dist[second_index, :], self.plot_path,'Flipped')
 
         self.edm_distribution = npos
 
     def corrections(self, cuts=True):
         self.tsr()
         # self.translation_scaling_rotation_nn()
-        if cuts:
-            count = 0
-            for i in range(0, len(self.polar_dist)):
-                if self.polar_dist[i, 0] > 50:
-
-                    self.nn_distribution=np.delete(self.nn_distribution, i-count, 0)
-                    self.edm_distribution=np.delete(self.edm_distribution, i-count, 0)
-                    self.edm_patterns = np.delete(self.edm_patterns, i-count, 0)
-                    count += 1
-            print(count)
-            self.tsr()
-
-
+        # if cuts:
+        #     count = 0
+            # for i in range(0, len(self.polar_dist)):
+                # if self.polar_dist[i, 0] > 50:
+                #
+                #     self.nn_distribution=np.delete(self.nn_distribution, i-count, 0)
+                #     self.edm_distribution=np.delete(self.edm_distribution, i-count, 0)
+                #     self.edm_patterns = np.delete(self.edm_patterns, i-count, 0)
+                #     count += 1
+            # print(count)
+            # self.tsr()
 
     def get_polar_errors(self):
         plt.figure(11, figsize=(9, 4))
@@ -257,9 +268,6 @@ class MC_EDM_Comp:
             if j == 0:
                 edm_dist = self.polar_dist
                 ptype = 'not_flipped'
-                print('yup')
-            else:
-                print('also yup')
 
             theta_err = np.zeros(len(edm_dist))
             rad_err = np.zeros(len(edm_dist))
@@ -273,18 +281,16 @@ class MC_EDM_Comp:
 
                 theta_err[i] = direction * ang_err
                 rad_err[i] = edm_dist[i, 0] - self.polar_nn_dist[i, 0]
+            errors[j] = np.mean(np.abs(ang_err))
 
             plt.subplot(1, 2, j + 1)
             plt.xlabel('Difference in Radii [cm]')
             plt.ylabel('Error in Angle [rad]')
             plt.plot(rad_err, theta_err, '.')
-            errors[j] = np.sum(np.abs(rad_err))
 
-        plt.xlabel('Difference in Radii [cm]')
-        plt.ylabel('Error in Angle [rad]')
-        plt.savefig('../EDM_Support/Errs' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
+        plt.savefig(self.plot_path+'Errs' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
         plt.close()
-        if errors[1]<errors[0]:
+        if errors[1] < errors[0]:
             self.flip = True
         return
 
@@ -294,7 +300,7 @@ class MC_EDM_Comp:
         else:
             X_edm = self.polar_dist
         X_nn = self.polar_nn_dist
-        directory = '../EDM_Support/' + strftime("%m_%d_%H:%M:%S", gmtime()) + '/'
+        directory = self.plot_path + strftime("%m_%d_%H:%M:%S", gmtime()) + '/'
         os.makedirs(os.path.dirname(directory), exist_ok=True)
         for i in range(0, len(self.edm_patterns)):
             self.pmt_pattern_map(i, X_edm[i, :],X_nn[i, :], directory)
@@ -351,7 +357,6 @@ class MC_EDM_Comp:
         # plt.plot(position[0]*np.cos(position[1]), position[0]*np.sin(position[1]),'k*')
         plt.savefig(directory+'Pattern'+flipped+str(pattern_number)+'.png')
         plt.close()
-
 
     def get_gaussian(self, pattern_number):
 
@@ -436,7 +441,62 @@ class MC_EDM_Comp:
 
         plt.xlabel('Difference in X [cm]')
         plt.ylabel('Difference in Y [cm]')
-        plt.savefig('../EDM_Support/Errs_Cart' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
+        plt.savefig(self.plot_path+'Errs_Cart' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
         plt.close()
 
         return np.mean(Error), np.std(Error)
+
+    def get_radial_dist(self):
+        X_edm = self.edm_distribution
+        radii = [np.sqrt((X_edm[i,0])**2+(X_edm[i,1]**2)) for i in range(0,len(X_edm))]
+        plt.figure(figsize=(4, 4))
+        plt.hist(radii, bins=int(np.floor(len(X_edm)/20)))
+        plt.xlabel('Radius')
+        plt.ylabel('Density')
+        plt.savefig(self.plot_path+'Radii' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
+        plt.close()
+
+    def plot_edm(self):
+        # if self.flip:
+        #     X_edm = self.polar_dist_flipped
+        # else:
+        #     X_edm = self.polar_dist
+        X_edm = self.edm_distribution
+        X_nn = self.nn_distribution
+        R_nn = [np.sqrt((X_nn[i, 0])**2+(X_nn[i, 1]**2)) for i in range(0, len(X_nn))]
+        # black_dat = [item for item in X_edm]
+        blue_dat = np.array([item for i, item in enumerate(X_edm) if (20 < R_nn[i] < 25)])  # (R_nn[i]<5) or
+        yellow_dat = np.array([item for i, item in enumerate(X_edm) if
+                            (-2.5 < X_nn[i, 0] < 2.5 and 30 < X_nn[i, 1] < 35)])
+        red_dat = np.array([item for i, item in enumerate(X_edm) if (R_nn[i] < 5)])
+
+        blue_dat_nn = np.array([item for i, item in enumerate(X_nn) if (20 < R_nn[i]<25)])
+        yellow_dat_nn = np.array([item for i, item in enumerate(X_nn) if
+                              (-2.5 < X_nn[i, 0] < 2.5 and 30 < X_nn[i, 1] < 35)])
+        red_dat_nn = np.array([item for i, item in enumerate(X_nn) if (R_nn[i] < 5)])
+
+
+        si = 10
+        plt.figure(figsize=(13, 6))
+        plt.subplot(121)
+        plt.scatter(X_nn[:, 0], X_nn[:, 1], color='black', s=si)
+        plt.scatter(yellow_dat_nn[:, 0], yellow_dat_nn[:, 1], color='darkorange', s=si)
+        plt.scatter(blue_dat_nn[:, 0], blue_dat_nn[:, 1], color='blue', s=si)
+        plt.scatter(red_dat_nn[:, 0], red_dat_nn[:, 1], color='red', s=si)
+
+
+        plt.subplot(122)
+        plt.scatter(X_edm[:, 0], X_edm[:, 1], color='black', s=si)
+        plt.scatter(yellow_dat[:, 0], yellow_dat[:, 1], color='darkorange', s=si)
+        plt.scatter(blue_dat[:, 0], blue_dat[:, 1], color='blue', s=si)
+
+        plt.scatter(red_dat[:, 0], red_dat[:, 1], color='red', s=si)
+
+        plt.title('EDM Distortion of NN Distribution')
+        plt.savefig(self.plot_path+'Bands' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
+
+        plt.show()
+
+
+
+
