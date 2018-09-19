@@ -1,9 +1,10 @@
 import numpy as np
 import numpy.linalg
+import os
 import numexpr as ne
 from random import shuffle, randint
 import matplotlib.pyplot as plt
-
+import logging
 from time import gmtime, strftime
 
 from matplotlib.collections import LineCollection
@@ -11,6 +12,8 @@ from matplotlib.collections import LineCollection
 from sklearn import manifold
 
 from TPC_Configuration import *
+
+
 
 
 class Pattern(object):
@@ -26,7 +29,7 @@ class Pattern(object):
     def get_pattern(self):
         return self.pattern
 
-    def get_sim_score(self, pattern, score_type,pmt_selection):
+    def get_sim_score(self, pattern, score_type,pmt_selection, Weights):
 
         ## Implement Quantum Efficiencies if not MonteCarlo Derived
 
@@ -42,23 +45,27 @@ class Pattern(object):
             score = np.sum(np.abs(np.array(A) - np.array(B)))
 
         elif score_type == 'RMS_Normed':
-            A = [i / max(self.pattern) for i in self.pattern]  ## Should I use Sum or Max for Normalizaiton
-            B = [j / max(pattern) for j in pattern]
-            score = np.sqrt(np.sum(np.square(np.subtract(np.array(A), np.array(B)))))
+            A = [i / sum(self.pattern) for i in self.pattern]  ## Should I use Sum or Max for Normalizaiton
+            B = [j / sum(pattern) for j in pattern]
+            score = np.sum(np.square(np.multiply(.8*Weights+1,np.subtract(np.array(A), np.array(B)))))
         elif score_type == 'Pattern_Fitter':
-            score = self.get_gof_pattern_fitter(pattern,pmt_selection, 'likelihood_poisson')
-
+            score = (self.get_gof_pattern_fitter(self.pattern,pattern,pmt_selection, 'chi2gamma')+
+                     self.get_gof_pattern_fitter(pattern,self.pattern, pmt_selection, 'chi2gamma'))
+        elif score_type == 'Correlate':
+            score = int(np.correlate(self.pattern,pattern))
         #### I need to implement Profile Likelihood Function from XENON Code
+        elif score_type == 'Ranked_RMS':
+            score = self.ranked_rms(pattern, Weights)
 
         else:
             score = False
 
         return score
 
-    def get_gof_pattern_fitter(self, pattern, pmt_selection, statistic):
+    def get_gof_pattern_fitter(self, pattern0, pattern, pmt_selection, statistic):
 
         areas_observed = np.array([item for i, item in enumerate(pattern) if i in pmt_selection])
-        q = np.array([item for i, item in enumerate(self.pattern) if i in pmt_selection])
+        q = np.array([item for i, item in enumerate(pattern0) if i in pmt_selection])
         square_syst_errors = (0 * areas_observed) ** 2
 
         qsum = q.sum(axis=-1)[..., np.newaxis]  # noqa
@@ -87,6 +94,18 @@ class Pattern(object):
 
         return np.sum(result, axis=-1)
 
+    def ranked_rms(self, pattern,Weights):
+        X = np.array([PMT_positions[i]['x'] for i in range(0, len(PMT_positions))])
+        Y = np.array([PMT_positions[i]['y'] for i in range(0, len(PMT_positions))])
+        pattern_self = [i/sum(self.pattern) for i in self.pattern]
+        pattern = [i/sum(pattern) for i in pattern]
+        ind_1 = np.argsort(np.array(self.pattern))[-30:][::-1]
+        ind_2 = np.argsort(np.array(pattern))[-30:][::-1]
+        difference_array = [np.sqrt((X[ind_1[i]]-X[ind_2[i]])**2+(Y[ind_1[i]]-Y[ind_2[i]])**2)
+                            * (pattern_self[ind_1[i]]*Weights[ind_1[i]] + pattern[ind_2[i]]*Weights[ind_2[i]])
+                            for i in range(0, len(ind_1))]
+        similarity = sum(difference_array)
+        return similarity
 
 
     def set_position(self, x, y):
@@ -106,22 +125,27 @@ class Pattern(object):
 
 class TpcRep(object):
 
-    def __init__(self):
+    def __init__(self,plot_path):
         self.edm = np.zeros(1)
         self.resolution = 5
         self.pattern_list = []
         self.distribution = np.array(1)
         self.empty = True
-        self.score = 'Pattern_Fitter'  # 'RMS_Normed' 'Manhattan_Distance'  # Other options. BinaryDifference...
+        self.score = 'Ranked_RMS' # 'Pattern_Fitter'  # 'Correlate', 'RMS_Normed' 'Manhattan_Distance'  # Other options. BinaryDifference...
         self.tpc_radius = 50
         self.polar_dist = np.array(1)
         self.polar_dist_flipped = np.array(1)
         self.polar_nn_dist = np.array(1)
         self.pmt_selection = active_pmts
+        self.plot_path=plot_path
+        logging.critical('Begining EDM Construction')
+        logging.critical('Type of distance calculation: '+self.score)
 
-    def give_events(self, events, number_of_events):
+    def give_events(self, events, number_of_events, weights):
+
         if self.empty:
             print('Starting with ' + str(len(events)) + ' number of events')
+            logging.critical('Starting with ' + str(len(events)) + ' number of events')
             # number_of_events = 400
             event_start = randint(100, len(events)-number_of_events)
             unsorted_events = [x for i, x in enumerate(events) if max(x[0]) and event_start < i < (event_start+number_of_events)]
@@ -129,18 +153,14 @@ class TpcRep(object):
             self.edm[0, 0] = 0
             shuffle(unsorted_events)
             unsorted_events, unsorted_x, unsorted_y = zip(*unsorted_events)  # Unzip the pattern, x and y after shuffle
-            unsorted_events = [x.tolist()[0:127] for x in unsorted_events]
+            unsorted_events = [x[0:127] for x in unsorted_events]#.tolist()
             self.pattern_list.append(Pattern(0, unsorted_events[0]))
             self.pattern_list[0].set_nn_position(unsorted_x[0], unsorted_y[0])
 
-            temp_similarity = [self.pattern_list[0].get_sim_score(item, self.score, active_pmts) for item in unsorted_events]
             events_list = unsorted_events
             events_x = unsorted_x
             events_y = unsorted_y
 
-            # events_list = [x for _, x in sorted(zip(temp_similarity, unsorted_events), reverse=True)]
-            # events_x = [x for _, x in sorted(zip(temp_similarity, unsorted_x), reverse=True)]
-            # events_y = [x for _, x in sorted(zip(temp_similarity, unsorted_y), reverse=True)]
             print('Finished shuffling. ' + str(len(unsorted_events)) + ' Events are left.')
             quarter, half, three_quarter = False, False, False
             for i, item in enumerate(events_list[1:]):
@@ -148,18 +168,18 @@ class TpcRep(object):
                 # print(i)
                 if max(item) > 0:
                     for j, item2 in enumerate(self.pattern_list[:I]):
-                        self.edm[I, j] = item2.get_sim_score(item, self.score, active_pmts)
+                        self.edm[I, j] = item2.get_sim_score(item, self.score, active_pmts,weights)
                         self.edm[j, I] = self.edm[I, j]
                     self.pattern_list.append(Pattern(I, item))
                     self.pattern_list[I].set_nn_position(events_x[I], events_y[I])
 
-                if I / len(events_list) > .25 and not quarter:
+                if I / len(events_list) > .5 and not quarter:
                     print('Finished a quarter of EDM')
                     quarter = True
-                elif I / len(events_list) > .5 and not half:
-                    print('Finsiehd half of the EDM')
+                elif I / len(events_list) > .75 and not half:
+                    print('Finished half of the EDM')
                     half = True
-                elif I / len(events_list) > .75 and not three_quarter:
+                elif I / len(events_list) > .987 and not three_quarter:
                     print('Finished Three Quarters of the EDM')
                     three_quarter = True
 
@@ -175,7 +195,7 @@ class TpcRep(object):
         dev_score = np.std(mean_score_array)
         del_count = 0
         for i, score in enumerate(mean_score_array.tolist()):
-            if score < mean_score - 1.5*dev_score or score > mean_score + 1.5*dev_score:
+            if  score > mean_score + 2*dev_score: #score < mean_score - 1.5*dev_score or
                 del self.pattern_list[i - del_count]
                 self.edm = np.delete(self.edm, i - del_count, 0)
                 self.edm = np.delete(self.edm, i - del_count, 1)
@@ -192,52 +212,6 @@ class TpcRep(object):
 
         print(np.shape(self.edm))
         print('There are ' + str(len(self.pattern_list)) + ' events left after cuts')
-
-    def mds_classic(self):
-        print('Starting MDS, Single Value Decomposition of the EDM')
-        I = np.identity(len(self.pattern_list))
-        J = I - np.ones(np.shape(I))
-        G = np.matmul(-J, np.matmul(self.edm, J)) * .5
-        U, S, V = numpy.linalg.svd(G)
-        print(np.shape(U), np.shape(S), np.shape(V))
-        S = np.diag(S)
-        X = np.matmul(np.sqrt(S), V)
-        for i, item in enumerate(self.pattern_list):
-            item.set_position(X[i, 0], X[i, 1])
-        self.distribution = X[:, 0:2]
-        print('Finished MDS')
-
-    def sklearn_mds(self):
-        seed = np.random.RandomState(seed=3)
-        nmds = manifold.MDS(n_components=2, metric=False, max_iter=2000, eps=1e-12,
-                            dissimilarity="precomputed", random_state=seed, n_jobs=1,
-                            n_init=1)
-
-        mds = manifold.MDS(n_components=2, max_iter=2000, eps=1e-12, random_state=seed,
-                           dissimilarity="precomputed", n_jobs=1,n_init = 10)
-        npos = mds.fit_transform(self.edm)#.embedding_
-
-        # npos = nmds.fit_transform(self.edm, init=pos)
-        plt.figure(10)
-        plt.scatter(npos[:, 0], npos[:, 1], color='darkorange', lw=0, label='NMDS')
-        plt.title('Quick n Dirty Sklearn')
-        plt.savefig('../EDM_Support/Sklearn' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
-
-        self.distribution = npos
-
-
-    def sklearn_local_linear(self):
-        # model = manifold.LocallyLinearEmbedding(n_neighbors=100, n_components=2, method='modified',
-        #                                eigen_solver='dense')
-        model = manifold.Isomap(n_neighbors=200, n_components=2,
-                                                eigen_solver='dense')
-        out = model.fit_transform(self.edm)
-        plt.figure(10)
-        plt.scatter(out[:, 0], out[:, 1], color='darkorange', lw=0, label='NMDS')
-        plt.title('local linear')
-        plt.savefig('../EDM_Support/SklearnLLE' + strftime("%m_%d_%H:%M:%S", gmtime()) + '.png')
-
-        self.distribution = out
 
     def get_distribution(self):
         return self.distribution
@@ -256,5 +230,18 @@ class TpcRep(object):
 
     def get_patterns(self):
         return self.pattern_list
+
+    def save_edm(self, time=strftime("%m_%d_%H:%M:%S", gmtime())):
+        self.time = str(time)
+        if not os.path.exists(self.plot_path + self.time + '/'):
+            os.mkdir(self.plot_path + self.time + '/')
+        np.save(self.plot_path + self.time + '/' + 'EDM', self.edm)
+        return self.time
+    def save_distributions(self):
+        np.save(self.plot_path + self.time + '/' + 'NN', self.get_nn_distribution())
+        np.save(self.plot_path + self.time + '/' + 'Pattern_List', self.get_patterns())
+
+
+
 
 
