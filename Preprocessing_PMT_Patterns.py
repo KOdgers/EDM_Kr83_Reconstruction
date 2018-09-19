@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from sklearn import svm
 from scipy import odr
-import pandas as pd
+
 import optunity
 import optunity.metrics
 import os

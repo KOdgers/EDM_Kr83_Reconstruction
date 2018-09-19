@@ -7,9 +7,6 @@ import matplotlib.pyplot as plt
 import logging
 from time import gmtime, strftime
 
-from matplotlib.collections import LineCollection
-
-from sklearn import manifold
 
 from TPC_Config import *
 

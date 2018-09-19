@@ -4,7 +4,7 @@ import numpy as np
 from scipy.optimize import curve_fit
 from time import gmtime, strftime
 from sklearn import manifold
-import os
+
 import logging
 
 
