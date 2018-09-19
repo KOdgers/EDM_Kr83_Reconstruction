@@ -9,10 +9,10 @@ import pandas as pd
 from time import time,strftime,gmtime
 import matplotlib.pyplot as plt
 
-# key_type = 'df' #
-key_type = 'Kr83m'
-# df_name = '/home/kelly/PycharmProjects/EDM_Kr83_Reconstruction/EDM_Support/09_18_17:55:43/reincarnated_pmts.h5'
-df_name = '/home/kelly/PycharmProjects/EDM_Support/Kr83m_s2_Areas_20Runs_10_20.h5'
+key_type = 'df' #
+# key_type = 'Kr83m'
+df_name = '/home/kelly/PycharmProjects/EDM_Kr83_Reconstruction/EDM_Support/09_18_17:55:43/reincarnated_pmts.h5'
+# df_name = '/home/kelly/PycharmProjects/EDM_Support/Kr83m_s2_Areas_20Runs_10_20.h5'
 
 layer_start = -18
 layer_end = -19
@@ -105,9 +105,6 @@ posrec_analysis.plot_edm_nn('polar')
 posrec_analysis.plot_edm_nn('polar_flipped')
 posrec_analysis.get_radial_dist()
 posrec_analysis.plot_edm()
-
-
-
 
 
 print('Took '+ str(((time.time()-start)/60)) + ' minutes to complete')
