@@ -12,53 +12,7 @@ from time import time, strftime, gmtime
 from sklearn import preprocessing
 import logging
 
-## Everything to run Preprocessing by itself ##
-###############################################
-# start_time = strftime("%m_%d_%H:%M:%S", gmtime())
-# Load hdf5 and pull list of Events ##############
-# df_name = '/home/kelly/PycharmProjects/EDM_Support/Kr83m_s2_Areas_20Runs_10_20.h5'
-# events_tree = pd.read_hdf(df_name, key='Kr83m')
 
-# events_tree = events_tree.loc[lambda df: df.int_a_z_3d_nn < -18, :]
-# events_tree = events_tree.loc[lambda df: df.int_a_z_3d_nn > -19, :]
-# print(len(events_tree))
-#
-# events_tree = events_tree.loc[lambda df: df.s2_a > 8000, :]
-# events_tree = events_tree.loc[lambda df: df.s2_a < 30000, :]
-
-# dir_path = os.getcwd()
-# plot_path = dir_path+'/EDM_Support/'+start_time+'/'
-# if not os.path.exists(plot_path):
-#     os.mkdir(plot_path)
-# LOG_FILENAME = plot_path+'LogFile.log'
-# logging.basicConfig(filename=LOG_FILENAME, level =logging.INFO)
-# logging.warning('Abandon All Hope. There is no joy to be had here.')
-# logging.info('Initial Dataframe: '+df_name)
-# logging.info('Start Time: '+start_time)
-
-
-
-single_dead = [[11, 13, 45,46,47, 12], [33, 35, 64, 34], [31, 61, 63, 87, 62], [35, 64, 36, 89, 65],
-               [44, 45, 72, 74, 95, 96, 73], [52, 53, 78, 80, 99, 100, 79], [61, 85, 87, 105, 86],
-               [63, 64, 87, 89, 106, 107, 88], [67, 68, 90, 92, 108, 109, 91], [82, 101, 103, 116, 102],
-               [105, 117, 119, 125, 118]]  #Dead single PMTS
-
-single_dead_comp = np.array([[5,7,40, 41,42, 6], [8, 10, 43, 9], [6, 40, 42, 70, 41], [6, 40, 42, 70, 41],
-                      [47,48, 74, 76, 96, 97, 75], [47,48, 74, 76, 96, 97, 75], [41, 69, 71, 93, 70],
-                      [48, 49, 75, 77, 97, 98,76], [71, 72, 93, 95, 110, 111, 94], [70, 92, 94, 110, 93],
-                      [93, 109, 111, 121, 110]])  ## Handselected regions for pulling dead pmt estimation calibration
-
-single_dead_comp_check = np.array([[17,19,50,51,52,18], [14,16,48,15], [24,55,57,82,56], [24,55,57,82,56],
-                      [42,43,70,72,93,94,71], [42,43,70,72,93,94,71], [36,89,67,90,66],
-                      [58,59,83,85,104,103,84], [76,77,97,99,113,114,98], [74,95,97,112,96],
-                      [96,111,113,122,112]])  ## Handselected regions for pulling dead pmt estimation
-
-double_dead = np.array([[0, 3, 36, 37, 38, 1], [0, 3, 36, 37, 38,  2],
-                        [25, 28, 57, 58, 59, 26], [25, 28, 57, 58, 59, 27]])
-double_dead_comp = np.array([[6, 9, 41, 42, 43, 7], [6, 9, 41, 42, 43, 8],
-                             [6, 9, 41, 42, 43, 7], [6, 9, 41, 42, 43, 8]])
-double_dead_comp_check = np.array([[18, 21, 51, 52, 53, 19], [12, 21, 51, 52, 53, 20],
-                                   [18, 21, 51, 52, 53, 19], [12, 21, 51, 52, 53, 20]])
 
 def dead_single_opt(pmts,pmts_check, events):
     N = int(len(events)/5)
