@@ -92,17 +92,33 @@ class Pattern(object):
         return np.sum(result, axis=-1)
 
     def ranked_rms(self, pattern,Weights):
-        X = np.array([PMT_positions[i]['x'] for i in range(0, len(PMT_positions))])
-        Y = np.array([PMT_positions[i]['y'] for i in range(0, len(PMT_positions))])
-        pattern_self = [i/sum(self.pattern) for i in self.pattern]
-        pattern = [i/sum(pattern) for i in pattern]
-        ind_1 = np.argsort(np.array(self.pattern))[-30:][::-1]
-        ind_2 = np.argsort(np.array(pattern))[-30:][::-1]
-        difference_array = [np.sqrt((X[ind_1[i]]-X[ind_2[i]])**2+(Y[ind_1[i]]-Y[ind_2[i]])**2)
+
+        # pattern_self = [i/sum(self.pattern) for i in self.pattern]
+        pattern_self = np.array(self.pattern)/sum(self.pattern)
+        # pattern = [i/sum(pattern) for i in pattern]
+        pattern = np.array(pattern)/sum(pattern)
+        ind_1 = np.argsort(self.pattern)[-30:][::-1]
+        ind_2 = np.argsort(pattern)[-30:][::-1]
+        difference_array = [np.sqrt((PMT_X[ind_1[i]]-PMT_X[ind_2[i]])**2+(PMT_Y[ind_1[i]]-PMT_Y[ind_2[i]])**2)
                             * (pattern_self[ind_1[i]]*Weights[ind_1[i]] + pattern[ind_2[i]]*Weights[ind_2[i]])
                             for i in range(0, len(ind_1))]
         similarity = sum(difference_array)
         return similarity
+
+    def mega_ranked_rms(self, pattern,Weights):
+
+        # pattern_self = [i/sum(self.pattern) for i in self.pattern]
+        pattern_self = np.array(self.pattern)/sum(self.pattern)
+        # pattern = [i/sum(pattern) for i in pattern]
+        pattern = np.array(pattern)/sum(pattern)
+        ind_1 = np.argsort(self.pattern)[-30:][::-1]
+        ind_2 = np.argsort(pattern)[-30:][::-1]
+        difference_array = [np.sqrt((PMT_X[ind_1[i]]-PMT_X[ind_2[i]])**2+(PMT_Y[ind_1[i]]-PMT_Y[ind_2[i]])**2)
+                            * (pattern_self[ind_1[i]]*Weights[ind_1[i]] + pattern[ind_2[i]]*Weights[ind_2[i]])
+                            for i in range(0, len(ind_1))]
+        similarity = sum(difference_array)
+        return similarity
+
 
 
     def set_position(self, x, y):
